@@ -30,7 +30,6 @@ function generarHashInalterable(datos) {
     return crypto.createHash('sha256').update(cadena).digest('hex');
 }
 
-// Endpoint de prueba del servidor
 app.get('/', (req, res) => {
     res.send('API ZenixMedic activa y funcionando.');
 });
@@ -63,14 +62,18 @@ app.post('/api/recetas/registrar', (req, res) => {
         ok: true, 
         idReceta, 
         firmaHash: firmaDigitalHash,
-        urlValidacion: `https://zenixmedic-cloud.onrender.com/validar/${idReceta}` 
+        urlValidacion: `https://zenixmedic-api.onrender.com/validar/${idReceta}` 
     });
 });
 
-// 2. VISTA DE VALIDACIÓN Y DESCARGA PARA EL PACIENTE / FARMACIA
+// 2. VISTA DE VALIDACIÓN CON CÓDIGO QR
 app.get('/validar/:id', (req, res) => {
-    // Si la receta no existe en memoria, muestra la receta Demo para que nunca falle ante la auditoría
-    const receta = recetasDB[req.params.id] || { ...recetaDemo, id: req.params.id };
+    const idReceta = req.params.id;
+    const receta = recetasDB[idReceta] || { ...recetaDemo, id: idReceta };
+
+    // URL dinámica para que el QR apunte a la misma página de validación
+    const urlValidacion = `https://zenixmedic-api.onrender.com/validar/${idReceta}`;
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(urlValidacion)}`;
 
     res.send(`
         <!DOCTYPE html>
@@ -83,7 +86,13 @@ app.get('/validar/:id', (req, res) => {
                 .card { background: white; max-width: 500px; margin: 20px auto; padding: 20px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
                 .badge { background: #16a34a; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8em; font-weight: bold; }
                 .box-rp { background: #fff7ed; border: 1px solid #ffedd5; border-left: 4px solid #f97316; padding: 15px; border-radius: 6px; font-size: 1.05em; margin: 15px 0; color: #1c1917; }
+                .qr-container { text-align: center; margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; }
                 .btn-print { background: #f97316; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; font-size: 1em; margin-top: 10px; }
+                @media print {
+                    .btn-print { display: none; }
+                    body { background: white; padding: 0; }
+                    .card { box-shadow: none; margin: 0; max-width: 100%; }
+                }
             </style>
         </head>
         <body>
@@ -107,7 +116,12 @@ app.get('/validar/:id', (req, res) => {
                 <p style="margin:5px 0;"><strong>Profesional:</strong> ${receta.medico}</p>
                 <p style="margin:5px 0;"><strong>Especialidad:</strong> ${receta.especialidad}</p>
                 <p style="margin:5px 0;"><strong>Matrícula:</strong> ${receta.matricula}</p>
-                <p style="margin:5px 0; font-size:0.85em; color:gray;"><strong>Firma Digital:</strong> ${receta.firmaDigitalHash.substring(0, 16)}...</p>
+                <p style="margin:5px 0; font-size:0.85em; color:gray;"><strong>Firma Digital (Hash SHA-256):</strong><br>${receta.firmaDigitalHash}</p>
+
+                <div class="qr-container">
+                    <img src="${qrApiUrl}" alt="Código QR de Validación" width="130" height="130"><br>
+                    <small style="color:#64748b; font-size:0.75em;">Escanee para validar autenticidad en ReNaPDiS</small>
+                </div>
 
                 <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar en PDF</button>
             </div>
