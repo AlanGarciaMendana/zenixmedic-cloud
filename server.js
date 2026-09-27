@@ -8,7 +8,6 @@ app.use(express.json());
 
 const DOMAIN = process.env.RENDER_EXTERNAL_URL || 'https://zenixmedic-cloud.onrender.com';
 
-// Base de datos en memoria para almacenamiento temporal durante la sesión
 const recetasDB = {};
 
 function generarHashInalterable(datos) {
@@ -17,14 +16,13 @@ function generarHashInalterable(datos) {
 }
 
 app.get('/', (req, res) => {
-    res.send('API ZenixMedic activa y homologada ante ReNaPDiS.');
+    res.send('API ZenixMedic activa y funcionando.');
 });
 
 // 1. REGISTRO DINÁMICO DE RECETA
 app.post('/api/recetas/registrar', (req, res) => {
-    const b = req.body; // Recibe el objeto dinámico del frontend
+    const b = req.body;
     
-    // Generación de identificadores de norma
     const idReceta = "REC-" + Date.now().toString(36).toUpperCase();
     const nroOrden = Math.floor(1000000000000 + Math.random() * 9000000000000).toString();
     const cuir = "001700230" + Date.now() + "001";
@@ -47,19 +45,18 @@ app.post('/api/recetas/registrar', (req, res) => {
             lugarAtencion: b.lugarAtencion || "Consultorio Médico ZenixMedic"
         },
         paciente: {
-            codigo: b.pacienteCodigo || (b.paciente ? b.paciente.substring(0,5).toUpperCase() : "PACIENTE"),
             nombre: b.paciente || "Paciente",
             dni: b.dni || "S/DNI",
-            cuil: b.cuil || (b.dni ? `20${b.dni}0` : "S/CUIL"),
+            cuil: b.cuil || "S/CUIL",
             nroAfiliado: b.nroAfiliado || b.cobertura || "Particular",
-            financiador: b.obraSocial || "Particular",
+            obraSocial: b.obraSocial || "Particular",
             plan: b.plan || "S/P",
             sexo: b.sexo || "No especificado",
             fechaNacimiento: b.fechaNacimiento || "S/F",
             codigoCie10: b.diagnostico || "Z76.9 - ATENCIÓN MÉDICA GENERAL"
         },
         medicamento: {
-            nombreComercial: b.nombreComercial || "Prescripción Médica",
+            nombreComercial: b.nombreComercial || "PRESCRIPCIÓN MÉDICA",
             monodroga: b.monodroga || "",
             presentacion: b.presentacion || "",
             cantidad: b.cantidad || 1,
@@ -86,7 +83,7 @@ app.post('/api/recetas/registrar', (req, res) => {
     });
 });
 
-// 2. VISTA DINÁMICA DE VALIDACIÓN (DISEÑO VERUMRP / RCTA)
+// 2. VISTA WEB CON CÓDIGO QR REINTEGRADO
 app.get('/validar/:id', (req, res) => {
     const id = req.params.id;
     const r = recetasDB[id] || recetasDB[`REC-${id}`];
@@ -99,6 +96,9 @@ app.get('/validar/:id', (req, res) => {
             </body>
         `);
     }
+
+    const urlValidacion = `${DOMAIN}/validar/${r.idReceta}`;
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(urlValidacion)}`;
 
     res.send(`
         <!DOCTYPE html>
@@ -121,8 +121,9 @@ app.get('/validar/:id', (req, res) => {
                 .med-mono { color: #475569; font-size: 0.9em; margin-bottom: 6px; }
                 .cuir-box { font-family: monospace; font-size: 0.75em; word-break: break-all; color: #475569; background: #f8fafc; padding: 6px; border-radius: 4px; border: 1px dashed #cbd5e1; margin-top: 10px; }
                 .icon-check { background: #22c55e; color: white; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; margin-left: 4px; }
-                .btn-print { background: #f97316; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; font-size: 0.95em; margin-top: 16px; }
-                @media print { .btn-print { display: none; } body { background: white; padding: 0; } .container { box-shadow: none; border: none; } }
+                .qr-container { text-align: center; margin: 15px 0 5px 0; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; }
+                .btn-print { background: #f97316; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; font-size: 0.95em; margin-top: 12px; }
+                @media print { .btn-print, .qr-container { display: none; } body { background: white; padding: 0; } .container { box-shadow: none; border: none; } }
             </style>
         </head>
         <body>
@@ -158,11 +159,11 @@ app.get('/validar/:id', (req, res) => {
                 <div class="divider"></div>
 
                 <div style="font-size: 0.88em; line-height: 1.5;">
-                    <p style="margin: 3px 0;"><span class="label">Paciente:</span> ${r.paciente.codigo} (${r.paciente.nombre})</p>
+                    <p style="margin: 3px 0;"><span class="label">Paciente:</span> ${r.paciente.nombre}</p>
                     <p style="margin: 3px 0;"><span class="label">DNI:</span> ${r.paciente.dni}</p>
                     <p style="margin: 3px 0;"><span class="label">CUIL:</span> ${r.paciente.cuil}</p>
                     <p style="margin: 3px 0;"><span class="label">Nro. Afiliado:</span> ${r.paciente.nroAfiliado}</p>
-                    <p style="margin: 3px 0;"><span class="label">Financiador:</span> ${r.paciente.financiador}</p>
+                    <p style="margin: 3px 0;"><span class="label">Obra Social:</span> ${r.paciente.obraSocial}</p>
                     <p style="margin: 3px 0;"><span class="label">Plan:</span> ${r.paciente.plan}</p>
                     <p style="margin: 3px 0;"><span class="label">Código CIE-10 / Diagnóstico:</span> ${r.paciente.codigoCie10}</p>
                 </div>
@@ -186,6 +187,11 @@ app.get('/validar/:id', (req, res) => {
                     <div class="grid-2" style="margin-top: 10px;">
                         <div><span class="label">Tratamiento prolongado:</span> ${r.medicamento.tratamientoProlongado}</div>
                     </div>
+                </div>
+
+                <div class="qr-container">
+                    <img src="${qrApiUrl}" alt="Código QR de Verificación" width="130" height="130"><br>
+                    <small style="color:#64748b; font-size:0.75em;">Escanee para validar autenticidad de la prescripción</small>
                 </div>
 
                 <button class="btn-print" onclick="window.print()">🖨️ Guardar o Imprimir Prescripción</button>
