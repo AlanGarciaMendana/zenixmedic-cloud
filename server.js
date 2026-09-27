@@ -8,49 +8,8 @@ app.use(express.json());
 
 const DOMAIN = process.env.RENDER_EXTERNAL_URL || 'https://zenixmedic-cloud.onrender.com';
 
-// Receta de prueba que replica los datos de tu imagen
-const recetaDemo = {
-    idReceta: "REC-19936E623",
-    nroOrden: "9600047794040",
-    cuir: "0017002302010000000000205960004779404001",
-    emisor: "ZENIXMEDIC",
-    estado: "OK",
-    creada: "17/09/2026",
-    vigenciaDesde: "17/09/2026",
-    medico: {
-        nombre: "Dr. Leonardo Zambrano",
-        matricula: "MN 138653",
-        profesion: "Médico ORL / Cx de CyC",
-        especialidad: "OTORRINOLARING., CIR. CABEZA Y CUELLO",
-        codigoRefeps: "541094049196",
-        lugarAtencion: "Av. R. Balbin 4211. Tel: 11 5272-3319/20"
-    },
-    paciente: {
-        codigo: "MALGA12071993",
-        nombre: "Alan Garcia Mendaña",
-        dni: "37786090",
-        cuil: "20377860900",
-        nroAfiliado: "8000061545764011005",
-        financiador: "SWISS MEDICAL",
-        plan: "SMG20",
-        sexo: "Masculino",
-        fechaNacimiento: "12/07/1993",
-        codigoCie10: "Z769 / Postoperatorio"
-    },
-    medicamento: {
-        nombreComercial: "ACLOXIGENAC",
-        monodroga: "diclofenac sódico",
-        presentacion: "50 mg comp.rec. x 10",
-        cantidad: 1,
-        tratamientoProlongado: "No"
-    },
-    firmaDigitalHash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-};
-
-const recetasDB = {
-    "19936E623": recetaDemo,
-    "REC-19936E623": recetaDemo
-};
+// Base de datos en memoria para almacenamiento temporal durante la sesión
+const recetasDB = {};
 
 function generarHashInalterable(datos) {
     const cadena = `${datos.paciente}-${datos.dni}-${datos.medico}-${datos.matricula}-${datos.tratamiento}-${datos.fecha}`;
@@ -61,11 +20,13 @@ app.get('/', (req, res) => {
     res.send('API ZenixMedic activa y homologada ante ReNaPDiS.');
 });
 
-// 1. REGISTRO DE RECETAS EN LA NUBE
+// 1. REGISTRO DINÁMICO DE RECETA
 app.post('/api/recetas/registrar', (req, res) => {
-    const body = req.body;
+    const b = req.body; // Recibe el objeto dinámico del frontend
+    
+    // Generación de identificadores de norma
     const idReceta = "REC-" + Date.now().toString(36).toUpperCase();
-    const nroOrden = Math.floor(1000000000003 + Math.random() * 9000000000000).toString();
+    const nroOrden = Math.floor(1000000000000 + Math.random() * 9000000000000).toString();
     const cuir = "001700230" + Date.now() + "001";
     const fechaActual = new Date().toLocaleDateString('es-AR');
 
@@ -78,34 +39,41 @@ app.post('/api/recetas/registrar', (req, res) => {
         creada: fechaActual,
         vigenciaDesde: fechaActual,
         medico: {
-            nombre: body.medico || "Dr. Leonardo Zambrano",
-            matricula: body.matricula || "MN 138653",
-            profesion: "Médico Prescriptor",
-            especialidad: body.especialidad || "OTORRINOLARINGOLOGÍA",
-            codigoRefeps: "541094049196",
-            lugarAtencion: "Consultorio Central ZenixMedic"
+            nombre: b.medico || "Médico Prescriptor",
+            matricula: b.matricula || "M.N. S/N",
+            profesion: b.profesion || "Profesional de la Salud",
+            especialidad: b.especialidad || "Medicina General",
+            codigoRefeps: b.codigoRefeps || "541094049196",
+            lugarAtencion: b.lugarAtencion || "Consultorio Médico ZenixMedic"
         },
         paciente: {
-            codigo: (body.paciente || "PACIENTE").substring(0,5).toUpperCase() + "12071993",
-            nombre: body.paciente || "Alan Garcia Mendaña",
-            dni: body.dni || "37786090",
-            cuil: body.cuil || ("20" + (body.dni || "37786090") + "0"),
-            nroAfiliado: body.nroAfiliado || "8000061545764011005",
-            financiador: body.obraSocial || "SWISS MEDICAL",
-            plan: body.plan || "SMG20",
-            sexo: body.sexo || "Masculino",
-            fechaNacimiento: body.fechaNacimiento || "12/07/1993",
-            codigoCie10: body.diagnostico || "Z76.9 - ATENCIÓN MÉDICA GENERAL"
+            codigo: b.pacienteCodigo || (b.paciente ? b.paciente.substring(0,5).toUpperCase() : "PACIENTE"),
+            nombre: b.paciente || "Paciente",
+            dni: b.dni || "S/DNI",
+            cuil: b.cuil || (b.dni ? `20${b.dni}0` : "S/CUIL"),
+            nroAfiliado: b.nroAfiliado || b.cobertura || "Particular",
+            financiador: b.obraSocial || "Particular",
+            plan: b.plan || "S/P",
+            sexo: b.sexo || "No especificado",
+            fechaNacimiento: b.fechaNacimiento || "S/F",
+            codigoCie10: b.diagnostico || "Z76.9 - ATENCIÓN MÉDICA GENERAL"
         },
         medicamento: {
-            nombreComercial: body.nombreComercial || "ACLOXIGENAC",
-            monodroga: body.monodroga || "diclofenac sódico",
-            presentacion: body.presentacion || "50 mg comp.rec. x 10",
-            cantidad: body.cantidad || 1,
-            tratamientoProlongado: "No",
-            indicacionesTexto: body.tratamiento || ""
+            nombreComercial: b.nombreComercial || "Prescripción Médica",
+            monodroga: b.monodroga || "",
+            presentacion: b.presentacion || "",
+            cantidad: b.cantidad || 1,
+            tratamientoProlongado: b.tratamientoProlongado || "No",
+            indicacionesTexto: b.tratamiento || ""
         },
-        firmaDigitalHash: generarHashInalterable({ paciente: body.paciente, dni: body.dni, medico: body.medico, matricula: body.matricula, tratamiento: body.tratamiento, fecha: fechaActual })
+        firmaDigitalHash: generarHashInalterable({ 
+            paciente: b.paciente, 
+            dni: b.dni, 
+            medico: b.medico, 
+            matricula: b.matricula, 
+            tratamiento: b.tratamiento, 
+            fecha: fechaActual 
+        })
     };
 
     recetasDB[idReceta] = nuevaReceta;
@@ -118,10 +86,19 @@ app.post('/api/recetas/registrar', (req, res) => {
     });
 });
 
-// 2. VISTA DE VALIDACIÓN OFICIAL (REPLICANDO VERUMRP EXATAMENTE COMO EN TU CAPTURA)
+// 2. VISTA DINÁMICA DE VALIDACIÓN (DISEÑO VERUMRP / RCTA)
 app.get('/validar/:id', (req, res) => {
     const id = req.params.id;
-    const r = recetasDB[id] || recetasDB[`REC-${id}`] || { ...recetaDemo, idReceta: id };
+    const r = recetasDB[id] || recetasDB[`REC-${id}`];
+
+    if (!r) {
+        return res.send(`
+            <body style="font-family:sans-serif; text-align:center; padding:40px; background:#f8d7da; color:#721c24;">
+                <h1>❌ Receta No Encontrada</h1>
+                <p>El código consultado no figura en el Registro Oficial ZenixMedic.</p>
+            </body>
+        `);
+    }
 
     res.send(`
         <!DOCTYPE html>
@@ -129,10 +106,10 @@ app.get('/validar/:id', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Prescripción Digital - ZenixMedic / VerumRP</title>
+            <title>Prescripción Digital - ${r.emisor}</title>
             <style>
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 12px; }
-                .container { max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+                .container { max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
                 .header-title { text-align: center; font-size: 1.15em; font-weight: 700; color: #0f172a; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
                 .grid-2 { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9em; }
                 .label { color: #0f172a; font-weight: 700; }
@@ -197,10 +174,10 @@ app.get('/validar/:id', (req, res) => {
 
                 <div style="padding: 0 4px; font-size: 0.88em;">
                     <div class="med-title">${r.medicamento.nombreComercial}</div>
-                    <div class="med-mono">${r.medicamento.monodroga}</div>
-                    <p style="margin: 4px 0;"><span class="label">Presentación:</span> ${r.medicamento.presentacion}</p>
+                    ${r.medicamento.monodroga ? `<div class="med-mono">${r.medicamento.monodroga}</div>` : ''}
+                    ${r.medicamento.presentacion ? `<p style="margin: 4px 0;"><span class="label">Presentación:</span> ${r.medicamento.presentacion}</p>` : ''}
                     <p style="margin: 4px 0;"><span class="label">Cantidad:</span> ${r.medicamento.cantidad}</p>
-                    ${r.medicamento.indicacionesTexto ? `<p style="margin: 4px 0;"><span class="label">Posología:</span> ${r.medicamento.indicacionesTexto}</p>` : ''}
+                    ${r.medicamento.indicacionesTexto ? `<p style="margin: 4px 0;"><span class="label">Indicaciones:</span> ${r.medicamento.indicacionesTexto.replace(/\n/g, '<br>')}</p>` : ''}
                     
                     <div class="cuir-box">
                         <span class="label">CUIR:</span> ${r.cuir}
@@ -216,11 +193,6 @@ app.get('/validar/:id', (req, res) => {
         </body>
         </html>
     `);
-});
-
-// Fallback universal
-app.use('*', (req, res) => {
-    res.redirect('/validar/19936E623');
 });
 
 const PORT = process.env.PORT || 3000;
