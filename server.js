@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const { Resend } = require('resend'); // IMPORTACIÓN DE RESEND AGREGADA
 
 const app = express();
 
@@ -19,6 +20,9 @@ const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
+
+// Inicialización de la API de correos (se lee de las variables de entorno)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Inicialización de la tabla en Neon
 pool.query(`
@@ -200,7 +204,7 @@ app.get('/validar/:id', async (req, res) => {
 
         let badgeHtml = '<span class="badge-ok">🟢 VÁLIDA / OK</span>';
         if (esDispensada) badgeHtml = '<span class="badge-dispensada">🔴 DISPENSADA</span>';
-        if (esVencida) badgeHtml = '<span class="badge-vencida">⚠️️ VENCIDA</span>';
+        if (esVencida) badgeHtml = '<span class="badge-vencida">⚠ VENCIDA</span>';
 
         const medico = typeof r.medico_json === 'string' ? JSON.parse(r.medico_json) : r.medico_json;
         const paciente = typeof r.paciente_json === 'string' ? JSON.parse(r.paciente_json) : r.paciente_json;
@@ -359,6 +363,43 @@ app.get('/validar/:id', async (req, res) => {
     } catch (error) {
         console.error("Error al validar receta:", error);
         res.status(500).send("Error al validar la receta.");
+    }
+});
+
+// 4. NUEVO ENDPOINT: Recuperar contraseña agregado
+app.post('/api/auth/recuperar-password', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ ok: false, mensaje: "El correo es obligatorio." });
+    }
+
+    try {
+        const { data, error } = await resend.emails.send({
+            from: 'ZenixMedic <onboarding@resend.dev>', // Modificar este remitente si configuras un dominio propio en Resend
+            to: email,
+            subject: 'ZenixMedic - Recuperación de Contraseña',
+            html: `
+                <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+                    <h2 style="color: #f97316;">ZenixMedic</h2>
+                    <h3>Recuperación de Acceso</h3>
+                    <p>Hola, hemos recibido una solicitud para restablecer la contraseña asociada a este correo.</p>
+                    <p>Por políticas de seguridad en historias clínicas, debés comunicarte con el <strong>Administrador del Sistema</strong> de tu clínica para que te asigne una nueva clave temporal.</p>
+                    <hr style="border: none; border-top: 1px solid #cbd5e1; margin: 20px 0;">
+                    <small style="color: #64748b;">Si no solicitaste este cambio, ignorá este mensaje.</small>
+                </div>
+            `
+        });
+
+        if (error) {
+            console.error("Error de Resend:", error);
+            return res.status(500).json({ ok: false, mensaje: "Fallo en el proveedor de correos." });
+        }
+
+        res.json({ ok: true, mensaje: "Correo de recuperación enviado con éxito." });
+    } catch (error) {
+        console.error("Error interno:", error);
+        res.status(500).json({ ok: false, mensaje: "Error interno en el servidor de la nube." });
     }
 });
 
